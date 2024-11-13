@@ -1,0 +1,72 @@
+shader halftone_gradient(
+    float dot_size = 0.1,               // base size of the dots
+    float scale = 5.0,                  // scale of the entire pattern
+    point center = point(0.5, 0.5, 0),  // center for the circular gradient
+    float falloff = 2.0,                // controls falloff of dot size
+    int gradient_type = 0,              // 0 for circular, 1 for linear
+    int projection_type = 0,            // 0 for UV, 1 for box
+    output color c = color(1, 1, 1)     // output color
+)
+{
+    // Set up variables to hold the UV coordinates
+    float uv_x;
+    float uv_y;
+
+    // Determine projection type
+    if (projection_type == 0) {
+        // Use built-in UV coordinates
+        uv_x = u;
+        uv_y = v;
+    } 
+    else if (projection_type == 1) {
+        // Box projection: choose the UVs based on the largest absolute component of the position
+        point pos = transform("common", P);
+        
+        if (abs(pos[0]) >= abs(pos[1]) && abs(pos[0]) >= abs(pos[2])) {
+            // Use YZ plane for front and back faces
+            uv_x = pos[1] * 0.5 + 0.5;
+            uv_y = pos[2] * 0.5 + 0.5;
+        } 
+        else if (abs(pos[1]) >= abs(pos[0]) && abs(pos[1]) >= abs(pos[2])) {
+            // Use XZ plane for left and right faces
+            uv_x = pos[0] * 0.5 + 0.5;
+            uv_y = pos[2] * 0.5 + 0.5;
+        } 
+        else {
+            // Use XY plane for top and bottom faces
+            uv_x = pos[0] * 0.5 + 0.5;
+            uv_y = pos[1] * 0.5 + 0.5;
+        }
+    }
+
+    // Calculate the gradient factor based on the selected type
+    float gradient_factor;
+    if (gradient_type == 0) {
+        // Circular gradient: use distance from center
+        gradient_factor = distance(point(uv_x, uv_y, 0), center);
+    } 
+    else {
+        // Linear gradient: use horizontal distance along the u-axis
+        gradient_factor = abs(uv_x - center[0]);
+    }
+
+    // Define dot size based on gradient factor to create a gradient effect
+    float dotRadius = dot_size * exp(-falloff * gradient_factor * scale);
+
+    // Calculate a grid based on scaled UV coordinates
+    float gridX = uv_x * scale;
+    float gridY = uv_y * scale;
+
+    // Get the fractional part of the grid to position dots within cells
+    float fx = gridX - floor(gridX) - 0.5;
+    float fy = gridY - floor(gridY) - 0.5;
+
+    // Calculate the distance from the center of the dot in each cell
+    float distToDotCenter = length(vector(fx, fy, 0));
+
+    // Adjust smoothstep range to make the dots visible and control sharpness
+    float inDot = smoothstep(dotRadius, dotRadius * 0.9, distToDotCenter);
+
+    // Create the dot pattern: black dots on a white background
+    c = mix(color(1, 1, 1), color(0, 0, 0), inDot);
+}
