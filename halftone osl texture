@@ -5,9 +5,13 @@ shader halftone_gradient(
     float falloff = 2.0,                // controls falloff of dot size
     int gradient_type = 0,              // 0 for circular, 1 for linear
     int projection_type = 0,            // 0 for UV, 1 for box
+    int shape_type = 0,                 // 0 for circle, 1 for square, 2 for diamond, 3 for triangle, 4 for star
     output color c = color(1, 1, 1)     // output color
 )
 {
+    // Define PI manually
+    float PI = 3.14159265358979323846;
+
     // Set up variables to hold the UV coordinates
     float uv_x;
     float uv_y;
@@ -61,12 +65,51 @@ shader halftone_gradient(
     float fx = gridX - floor(gridX) - 0.5;
     float fy = gridY - floor(gridY) - 0.5;
 
-    // Calculate the distance from the center of the dot in each cell
-    float distToDotCenter = length(vector(fx, fy, 0));
+    // Initialize a variable to store the result of the shape check
+    float inShape;
+
+    // Select the shape type
+    if (shape_type == 0) {
+        // Circle shape
+        inShape = smoothstep(dotRadius, dotRadius * 0.9, length(vector(fx, fy, 0)));
+    } 
+    else if (shape_type == 1) {
+        // Square shape
+        inShape = step(abs(fx), dotRadius) * step(abs(fy), dotRadius);
+    }
+    else if (shape_type == 2) {
+        // Diamond shape (rotated square)
+        inShape = smoothstep(dotRadius, dotRadius * 0.9, abs(fx) + abs(fy));
+    }
+    else if (shape_type == 3) {
+        // Equilateral Triangle shape
+        // Calculate the angles for an equilateral triangle (120° apart)
+        float angle1 = PI / 3.0;
+        float angle2 = 2.0 * PI / 3.0;
+        float angle3 = 3.0 * PI / 3.0;
+        
+        // Check the point's distance to the center of each triangle edge
+        float d1 = abs(fx * cos(angle1) + fy * sin(angle1));
+        float d2 = abs(fx * cos(angle2) + fy * sin(angle2));
+        float d3 = abs(fx * cos(angle3) + fy * sin(angle3));
+
+        // Triangle is inside the area if the distances are less than the dot radius
+        inShape = step(dotRadius, max(d1, max(d2, d3)));
+    }
+    else if (shape_type == 4) {
+        // Star shape (5-point star)
+        // Convert the UV coordinates into polar coordinates
+        float angle = atan2(fy, fx);  // Corrected to use atan2
+        float radius = length(vector(fx, fy, 0));
+        float starSize = dotRadius * 0.8;
+        
+        // Create the star shape by using angle modulated by pi (for a 5-point star)
+        // Adjust the star shape by using sine to alternate between inner and outer points
+        float starPattern = mod(abs(angle) / (PI * 2) * 5.0, 1.0); // 5 points
+        float radiusFactor = 1.0 + 0.3 * sin(starPattern * PI);  // 0.3 to alternate between inner and outer points
+        inShape = smoothstep(0.1, 0.0, abs(starPattern - 0.5)) * step(radius, radiusFactor * starSize);
+    }
 
     // Adjust smoothstep range to make the dots visible and control sharpness
-    float inDot = smoothstep(dotRadius, dotRadius * 0.9, distToDotCenter);
-
-    // Create the dot pattern: black dots on a white background
-    c = mix(color(1, 1, 1), color(0, 0, 0), inDot);
+    c = mix(color(1, 1, 1), color(0, 0, 0), inShape);
 }
