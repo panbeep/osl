@@ -1,1 +1,1 @@
-A custom osl textures
+OSL textures for use with 3d apps
