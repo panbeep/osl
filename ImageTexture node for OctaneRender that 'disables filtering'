@@ -1,0 +1,86 @@
+// Proof of concept ImageTexture node for OctaneRender.
+// Code that 'disables filtering' is based on a method from Image2Screen shader by François GASTALDO.
+// sRGB response calculation is based on the OCIO python source codes by Haarm-Pieter Duiker.
+// Feel free to reuse and adapt.
+//
+// Cheers
+// milanm.
+
+shader mm_ImageTexture(
+   string File = "1",
+   int ToneResponse = 0 [[string widget = "mapper", string options = "sRGB (IEC 61966-2-1):0|Gamma 2.2:2|Linear:3|Custom Gamma:4"]],
+   int InversionOrder = 1 [[string widget = "mapper", string options = "Before Linearizing:0|After Linearizing (classic):1"]],
+   float Gamma = 2.2 [[ float min=0.01, float max=10 ]],
+   int Filtering = 1 [[string widget = "checkBox"]],
+   int Invert = 0 [[string widget = "checkBox"]],
+   point Projection = P,
+   output color pixeltex = color ( 1.0 , 1.0 , 1.0 ),
+   )
+{
+   // get resolution of the texture as integer
+   int res[2];
+   gettextureinfo(File, "resolution", res);
+
+   // Convert res to float so that we can
+   // find the size of one half of pixel
+   float resX = res[0];
+   float resY = res[1];
+
+   // Half pixel offset as float
+   float oX = (1/resX)/2 ;
+   float oY = (1/resY)/2 ;
+
+   // Pixelate the UVs if filtering is disabled
+   point pixelateduv = color ( 0.0 , 0.0 , 0.0 ) ;
+
+   if (Filtering==0) {
+   pixelateduv[0] = ( trunc( Projection[0] * (res[0]) ) ) / (res[0]) ;
+   pixelateduv[1] = ( trunc( Projection[1] * (res[1]) ) ) / (res[1]) ;}
+   else {pixelateduv[0] = Projection[0]; pixelateduv[1] = Projection[1];}
+
+   // lookup the colors from texture file + add half pixel offset to UVs if filtering is disabled
+   color col;
+
+   if (Filtering==0) {
+   col = texture( File, pixelateduv[0]+oX, pixelateduv[1]+oY );
+   }
+   else {
+   col = texture( File, pixelateduv[0], pixelateduv[1] );
+   }
+
+   if (Invert==1&&InversionOrder==0) {col = 1-col;}
+
+   color lin;
+
+   // sRGB (IEC 61966-2-1)
+   if (ToneResponse==0)
+   {
+      float a = 1.055;
+      float b = 0.04045;
+      float d = 12.92;
+      float g = 2.4;
+
+      if (col[0] < b) {lin[0] = col[0] / d;}
+      else {lin[0] = pow(((col[0] + (a - 1)) / a), g);}
+
+      if (col[1] < b) {lin[1] = col[1] / d;}
+      else {lin[1] = pow(((col[1] + (a - 1)) / a), g);}
+
+      if (col[2] < b) {lin[2] = col[2] / d;}
+      else {lin[2] = pow(((col[2] + (a - 1)) / a), g);}
+   }
+
+   // Gamma 2.2
+   else if (ToneResponse==2)   {lin = pow(col, 2.2);}
+
+   // Linear
+   else if (ToneResponse==3)   {lin = col;}
+
+   // Custom gamma
+   else   {lin = pow(col, Gamma);}
+
+   if (Invert==1&&InversionOrder==1) {lin = 1-lin;}
+
+   pixeltex = lin;
+
+}
